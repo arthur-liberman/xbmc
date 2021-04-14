@@ -9,6 +9,8 @@
 #include "VideoPlayerCodec.h"
 
 #include "ServiceBroker.h"
+#include "settings/Settings.h"
+#include "settings/SettingsComponent.h"
 #include "URL.h"
 #include "cores/AudioEngine/AEResampleFactory.h"
 #include "cores/AudioEngine/Interfaces/AE.h"
@@ -525,8 +527,13 @@ CAEStreamInfo::DataType VideoPlayerCodec::GetPassthroughStreamType(AVCodecID cod
 
   if (!supports && codecId == AV_CODEC_ID_DTS)
   {
-    format.m_streamInfo.m_type = CAEStreamInfo::STREAM_TYPE_DTSHD_CORE;
-    supports = CServiceBroker::GetActiveAE()->SupportsRaw(format);
+    const std::shared_ptr<CSettings> settings = CServiceBroker::GetSettingsComponent()->GetSettings();
+    bool dtsCoreFallback = settings->GetBool(CSettings::SETTING_AUDIOOUTPUT_DTSHDCOREFALLBACK);
+    if (dtsCoreFallback || (profile != FF_PROFILE_DTS_HD_HRA && profile != FF_PROFILE_DTS_HD_MA))
+    {
+      format.m_streamInfo.m_type = CAEStreamInfo::STREAM_TYPE_DTSHD_CORE;
+      supports = CServiceBroker::GetActiveAE()->SupportsRaw(format);
+    }
   }
 
   if (supports)
