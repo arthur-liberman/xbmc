@@ -1812,8 +1812,10 @@ CAMLCodec::CAMLCodec(CProcessInfo &processInfo)
   , m_cur_pts(DVD_NOPTS_VALUE)
   , m_last_pts(DVD_NOPTS_VALUE)
   , m_bufferIndex(-1)
+  , m_bufferIndexStart(UINT_MAX)
   , m_state(0)
   , m_processInfo(processInfo)
+  , m_is_dv_p7_mel(false)
 {
   am_private = new am_private_t;
   memset(am_private, 0, sizeof(am_private_t));
@@ -1865,6 +1867,7 @@ bool CAMLCodec::OpenDecoder(CDVDStreamInfo &hints)
   m_hints.pClock = hints.pClock;
   m_tp_last_frame = std::chrono::system_clock::now();
   m_decoder_timeout = CServiceBroker::GetSettingsComponent()->GetAdvancedSettings()->m_videoDecoderTimeout;
+  m_bufferIndexStart = UINT_MAX;
 
   if (!OpenAmlVideo(hints))
   {
@@ -2020,7 +2023,7 @@ bool CAMLCodec::OpenDecoder(CDVDStreamInfo &hints)
     }
 
     am_private->gcodec.dv_enable = 1;
-    if (hints.dovi.dv_profile == 7 && CServiceBroker::GetSettingsComponent()->GetSettings()->GetInt(
+    if (!m_is_dv_p7_mel && hints.dovi.dv_profile == 7 && CServiceBroker::GetSettingsComponent()->GetSettings()->GetInt(
         CSettings::SETTING_VIDEOPLAYER_CONVERTDOVI) == 0)
     {
       CSysfsPath amdolby_vision_debug{"/sys/class/amdolby_vision/debug"};
@@ -2377,6 +2380,12 @@ void CAMLCodec::Reset()
   SetPollDevice(am_private->vcodec.cntl_handle);
 }
 
+bool CAMLCodec::Reopen()
+{
+  CloseDecoder();
+  return OpenDecoder(m_hints);
+}
+
 bool CAMLCodec::AddData(uint8_t *pData, size_t iSize, double dts, double pts)
 {
   int data_len, free_len;
@@ -2600,6 +2609,8 @@ int CAMLCodec::DequeueBuffer()
   			static_cast<double>(m_cur_pts) /  DVD_TIME_BASE, vbuf.index);
 
     m_bufferIndex = vbuf.index;
+    if (m_bufferIndexStart == UINT_MAX)
+      m_bufferIndexStart = m_bufferIndex - 1;
   }
   else if (ret != EAGAIN)
   {
@@ -2607,6 +2618,38 @@ int CAMLCodec::DequeueBuffer()
   }
 
   return ret;
+}
+
+CDVDVideoCodec::VCReturn CAMLCodec::CheckDvP7Mel()
+{
+    if (!m_is_dv_p7_mel && m_bufferIndexStart != UINT_MAX)
+    {
+      m_is_dv_p7_mel = true;
+      if (m_hints.dovi.dv_profile == 7)
+      {
+        CSysfsPath dolby_vision_wait_delay{"/sys/module/amdolby_vision/parameters/dolby_vision_wait_delay"};
+        if (dolby_vision_wait_delay.Exists())
+        {
+          CSysfsPath is_mel{"/sys/module/amdolby_vision/parameters/is_mel"};
+          if (is_mel.Exists())
+          {
+            if (is_mel.Get<char>().value() == 'Y')
+            {
+              CLog::Log(LOGDEBUG, LOGVIDEO, "CAMLCodec::CheckDvP7Mel: DoVi P7 MEL content detected, request to reopen decoder");
+              return CDVDVideoCodec::VC_REOPEN;
+            }
+            else if ((m_bufferIndex - m_bufferIndexStart) <= dolby_vision_wait_delay.Get<unsigned int>().value())
+              m_is_dv_p7_mel = false;
+          }
+          else
+            CLog::Log(LOGERROR, LOGVIDEO, "CAMLCodec::CheckDvP7Mel: is_mel sysfs not found");
+        }
+        else
+          CLog::Log(LOGERROR, LOGVIDEO, "CAMLCodec::CheckDvP7Mel: dolby_vision_wait_delay sysfs not found");
+      }
+    }
+
+    return CDVDVideoCodec::VC_NONE;
 }
 
 CDVDVideoCodec::VCReturn CAMLCodec::GetPicture(VideoPicture *pVideoPicture)
@@ -2646,6 +2689,8 @@ CDVDVideoCodec::VCReturn CAMLCodec::GetPicture(VideoPicture *pVideoPicture)
   }
   else if (m_drain)
     return CDVDVideoCodec::VC_EOF;
+  else if (CheckDvP7Mel() == CDVDVideoCodec::VC_REOPEN)
+    return CDVDVideoCodec::VC_REOPEN;
   else if (buffer_level > 2.0f)
     return CDVDVideoCodec::VC_NONE;
   else if (ret != EAGAIN || elapsed_since_last_frame > std::chrono::seconds(m_decoder_timeout))

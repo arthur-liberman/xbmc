@@ -66,6 +66,7 @@ public:
   bool          Enable_vadj1();
   void          CloseDecoder();
   void          Reset();
+  bool          Reopen();
 
   bool          AddData(uint8_t *pData, size_t size, double dts, double pts);
   CDVDVideoCodec::VCReturn GetPicture(VideoPicture* pVideoPicture);
@@ -100,6 +101,8 @@ private:
   unsigned int  GetDecoderVideoRate();
   std::string   GetHDRStaticMetadata();
 
+  CDVDVideoCodec::VCReturn CheckDvP7Mel();
+
   DllLibAmCodec   *m_dll;
   bool             m_opened;
   bool             m_drain = false;
@@ -109,6 +112,8 @@ private:
   uint64_t         m_cur_pts;
   uint64_t         m_last_pts;
   uint32_t         m_bufferIndex;
+  uint32_t         m_bufferIndexStart;
+  bool             m_is_dv_p7_mel;
 
   CRect            m_dst_rect;
   CRect            m_display_rect;
