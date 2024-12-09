@@ -262,10 +262,6 @@ static const uint64_t UINT64_0 = 0x8000000000000000ULL;
 
 #define CODEC_TAG_RV30  (0x30335652)
 #define CODEC_TAG_RV40  (0x30345652)
-#define CODEC_TAG_MJPEG (0x47504a4d)
-#define CODEC_TAG_mjpeg (0x47504a4c)
-#define CODEC_TAG_jpeg  (0x6765706a)
-#define CODEC_TAG_mjpa  (0x61706a6d)
 
 #define RW_WAIT_TIME    (5 * 1000) // 20ms
 
@@ -581,7 +577,7 @@ static vdec_type_t codec_tag_to_vdec_type(unsigned int codec_tag)
       break;
   }
 
-  CLog::Log(LOGDEBUG, "codec_tag_to_vdec_type, codec_tag({:d}) -> vdec_type({:d})", codec_tag, dec_type);
+  CLog::Log(LOGDEBUG, "codec_tag_to_vdec_type, codec_tag(0x{:08X}) -> vdec_type({:d})", codec_tag, dec_type);
   return dec_type;
 }
 
@@ -1989,7 +1985,7 @@ bool CAMLCodec::OpenDecoder(CDVDStreamInfo &hints, enum ELType dovi_el_type)
     am_private->video_codec_type = codec_tag_to_vdec_type(am_private->video_codec_id);
 
   CLog::Log(LOGDEBUG, "CAMLCodec::OpenDecoder "
-    "hints.width({:d}), hints.height({:d}), hints.codec({:d}), hints.codec_tag({:d})",
+    "hints.width({:d}), hints.height({:d}), hints.codec({:d}), hints.codec_tag(0x{:08X})",
     hints.width, hints.height, hints.codec, hints.codec_tag);
   CLog::Log(LOGDEBUG, "CAMLCodec::OpenDecoder hints.fpsrate({:d}), hints.fpsscale({:d}), video_rate({:d})",
     hints.fpsrate, hints.fpsscale, am_private->video_rate);
