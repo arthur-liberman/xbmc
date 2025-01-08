@@ -661,7 +661,7 @@ void CAESinkALSA::aml_configure_simple_control(std::string &device, const enum I
           }
 
           CLog::Log(LOGINFO, "CAESinkALSA - Set Spdif to HDMITX to \"{}\"", AMLSpdifIDToStr(spdif_id).c_str());
-          snd_mixer_selem_id_set_name(sid, "HDMITX Audio Source Select");
+          snd_mixer_selem_id_set_name(sid, "Spdif to HDMITX Select");
           elem = snd_mixer_find_selem(handle, sid);
           if (!elem) {
             CLog::Log(LOGERROR, "CAESinkALSA - Unable to find simple control '{}',{:d}\n",
