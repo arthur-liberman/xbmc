@@ -864,18 +864,39 @@ bool aml_probe_resolutions(std::vector<RESOLUTION_INFO> &resolutions)
 {
   std::string valstr, addstr;
 
-  valstr = aml_get_drmDevice_modes();
+  CSysfsPath user_dcapfile{CSpecialProtocol::TranslatePath("special://home/userdata/disp_cap")};
 
-  CSysfsPath vesa{"/flash/vesa.enable"};
-  if (vesa.Exists())
+  if (!user_dcapfile.Exists())
   {
-    CSysfsPath vesa_cap{"/sys/class/amhdmitx/amhdmitx0/vesa_cap"};
-    if (vesa_cap.Exists())
+    valstr = aml_get_drmDevice_modes();
+
+    CSysfsPath vesa{"/flash/vesa.enable"};
+    if (vesa.Exists())
     {
-      addstr = vesa_cap.Get<std::string>().value();
+      CSysfsPath vesa_cap{"/sys/class/amhdmitx/amhdmitx0/vesa_cap"};
+      if (vesa_cap.Exists())
+      {
+        addstr = vesa_cap.Get<std::string>().value();
+        valstr += "\n" + addstr;
+      }
+    }
+
+    CSysfsPath custom_mode{"/sys/class/amhdmitx/amhdmitx0/custom_mode"};
+    if (custom_mode.Exists())
+    {
+      addstr = custom_mode.Get<std::string>().value();
+      valstr += "\n" + addstr;
+    }
+
+    CSysfsPath user_daddfile{CSpecialProtocol::TranslatePath("special://home/userdata/disp_add")};
+    if (user_daddfile.Exists())
+    {
+      addstr = user_daddfile.Get<std::string>().value();
       valstr += "\n" + addstr;
     }
   }
+  else
+    valstr = user_dcapfile.Get<std::string>().value();
 
   if (aml_display_support_3d())
   {
