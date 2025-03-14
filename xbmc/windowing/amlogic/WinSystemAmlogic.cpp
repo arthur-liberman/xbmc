@@ -48,9 +48,9 @@ CWinSystemAmlogic::CWinSystemAmlogic()
 :  m_nativeWindow(NULL)
 ,  m_libinput(new CLibInputHandler)
 ,  m_force_mode_switch(false)
-,  m_fdMonitorId(-1)
+,  m_fdMonitorId(0)
 ,  m_udev(NULL)
-,  m_callback_data(NULL, NULL)
+,  m_udevMonitor(NULL)
 {
   const char *env_framebuffer = getenv("FRAMEBUFFER");
 
@@ -74,11 +74,6 @@ CWinSystemAmlogic::CWinSystemAmlogic()
 CWinSystemAmlogic::~CWinSystemAmlogic()
 {
   MonitorStop();
-  if (m_callback_data.udevMonitor)
-    udev_monitor_unref(m_callback_data.udevMonitor);
-
-  if (m_udev)
-    udev_unref(m_udev);
 }
 
 void CWinSystemAmlogic::SettingOptionsComponentsFiller(const SettingConstPtr& setting,
@@ -99,7 +94,7 @@ void CWinSystemAmlogic::MonitorStart()
 {
   int err;
 
-  if (!m_udev && m_fdMonitorId == -1)
+  if (!m_udev)
   {
     m_udev = udev_new();
     if (!m_udev)
@@ -108,21 +103,21 @@ void CWinSystemAmlogic::MonitorStart()
       return;
     }
 
-    m_callback_data.udevMonitor = udev_monitor_new_from_netlink(m_udev, "udev");
-    if (!m_callback_data.udevMonitor)
+    m_udevMonitor = udev_monitor_new_from_netlink(m_udev, "udev");
+    if (!m_udevMonitor)
     {
       CLog::Log(LOGERROR, "CWinSystemAmlogic::Start - udev_monitor_new_from_netlink() failed");
       goto err_unref_udev;
     }
 
-    err = udev_monitor_filter_add_match_subsystem_devtype(m_callback_data.udevMonitor, "drm", NULL);
+    err = udev_monitor_filter_add_match_subsystem_devtype(m_udevMonitor, "drm", NULL);
     if (err)
     {
       CLog::Log(LOGERROR, "CWinSystemAmlogic::Start - udev_monitor_filter_add_match_subsystem_devtype() failed");
       goto err_unref_monitor;
     }
 
-    err = udev_monitor_enable_receiving(m_callback_data.udevMonitor);
+    err = udev_monitor_enable_receiving(m_udevMonitor);
     if (err)
     {
       CLog::Log(LOGERROR, "CWinSystemAmlogic::Start - udev_monitor_enable_receiving() failed");
@@ -130,19 +125,17 @@ void CWinSystemAmlogic::MonitorStart()
     }
 
     const auto eventMonitor = CServiceBroker::GetPlatform().GetService<CFDEventMonitor>();
-    m_callback_data.object = this;
-    m_fdMonitorId = 0;
     eventMonitor->AddFD(
-        CFDEventMonitor::MonitoredFD(udev_monitor_get_fd(m_callback_data.udevMonitor),
-                                     POLLIN, FDEventCallback, (void *)&m_callback_data),
+        CFDEventMonitor::MonitoredFD(udev_monitor_get_fd(m_udevMonitor),
+                                     POLLIN, FDEventCallback, m_udevMonitor),
         m_fdMonitorId);
   }
 
   return;
 
 err_unref_monitor:
-  udev_monitor_unref(m_callback_data.udevMonitor);
-  m_callback_data.udevMonitor = NULL;
+  udev_monitor_unref(m_udevMonitor);
+  m_udevMonitor = NULL;
 err_unref_udev:
   udev_unref(m_udev);
   m_udev = NULL;
@@ -150,20 +143,23 @@ err_unref_udev:
 
 void CWinSystemAmlogic::MonitorStop()
 {
-  if (m_fdMonitorId != -1)
+  if (m_udev)
   {
     const auto eventMonitor = CServiceBroker::GetPlatform().GetService<CFDEventMonitor>();
     eventMonitor->RemoveFD(m_fdMonitorId);
-    m_fdMonitorId = -1;
+
+    udev_monitor_unref(m_udevMonitor);
+    m_udevMonitor = NULL;
+    udev_unref(m_udev);
+    m_udev = NULL;
   }
 }
+
 
 void CWinSystemAmlogic::HotplugEvent()
 {
   std::string preferred_mode = aml_get_preferred_mode();
   CLog::Log(LOGDEBUG, "CWinSystemAmlogic - HotplugEvent, preferred mode: {}", preferred_mode);
-
-  RefreshResolutions();
 
   if (!preferred_mode.empty())
   {
@@ -179,8 +175,7 @@ void CWinSystemAmlogic::HotplugEvent()
 
 void CWinSystemAmlogic::FDEventCallback(int id, int fd, short revents, void *data)
 {
-  struct udev_monitor *udevMonitor = ((struct callback_data *)data)->udevMonitor;
-  CWinSystemAmlogic *_this = ((struct callback_data *)data)->object;
+  struct udev_monitor *udevMonitor = (struct udev_monitor *)data;
   struct udev_device *device;
 
   while ((device = udev_monitor_receive_device(udevMonitor)) != NULL)
@@ -190,10 +185,7 @@ void CWinSystemAmlogic::FDEventCallback(int id, int fd, short revents, void *dat
       udev_device_get_syspath(device), udev_device_get_devpath(device), action);
 
     if (StringUtils::EqualsNoCase(action, "change"))
-    {
-      _this->MonitorStop();
-      _this->HotplugEvent();
-    }
+      HotplugEvent();
   }
 }
 
@@ -372,9 +364,11 @@ bool CWinSystemAmlogic::DestroyWindow()
   return true;
 }
 
-void CWinSystemAmlogic::RefreshResolutions()
+void CWinSystemAmlogic::UpdateResolutions()
 {
-  CDisplaySettings::GetInstance().Clear();
+  CWinSystemBase::UpdateResolutions();
+
+  CDisplaySettings::GetInstance().ClearCustomResolutions();
 
   RESOLUTION_INFO resDesktop, curDisplay;
   std::vector<RESOLUTION_INFO> resolutions;
@@ -412,13 +406,6 @@ void CWinSystemAmlogic::RefreshResolutions()
       CDisplaySettings::GetInstance().GetResolutionInfo(RES_DESKTOP) = res;
     }
   }
-}
-
-void CWinSystemAmlogic::UpdateResolutions()
-{
-  CWinSystemBase::UpdateResolutions();
-
-  RefreshResolutions();
 }
 
 bool CWinSystemAmlogic::IsHDRDisplay()
