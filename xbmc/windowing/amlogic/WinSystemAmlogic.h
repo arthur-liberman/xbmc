@@ -22,7 +22,6 @@ class CWinSystemAmlogic : public CWinSystemBase
 {
 public:
   CWinSystemAmlogic();
-  virtual ~CWinSystemAmlogic();
 
   bool InitWindowSystem() override;
   bool DestroyWindowSystem() override;
@@ -47,9 +46,6 @@ public:
                                              std::vector<IntegerSettingOption>& list,
                                              int& current,
                                              void* data);
-
-  void MonitorStart();
-  void MonitorStop();
 protected:
   std::string m_framebuffer_name;
   EGLDisplay m_nativeDisplay;
@@ -65,12 +61,4 @@ protected:
   std::unique_ptr<CLibInputHandler> m_libinput;
   CHDRCapabilities m_hdr_caps;
   bool m_force_mode_switch;
-private:
-  static void HotplugEvent();
-  static void FDEventCallback(int id, int fd, short revents, void *data);
-
-  int m_fdMonitorId;
-
-  struct udev *m_udev;
-  struct udev_monitor* m_udevMonitor;
 };
