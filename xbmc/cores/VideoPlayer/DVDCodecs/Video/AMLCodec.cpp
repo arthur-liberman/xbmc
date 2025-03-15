@@ -2022,10 +2022,10 @@ bool CAMLCodec::OpenDecoder(CDVDStreamInfo &hints, enum ELType dovi_el_type)
   if (dv_enable)
   {
     // enable Dolby Vision
-    CSysfsPath("/sys/module/aml_media/parameters/dolby_vision_enable", 'Y');
+    CSysfsPath("/sys/module/amdolby_vision/parameters/dolby_vision_enable", 'Y');
 
     // use player led mode when enabled
-    CSysfsPath dolby_vision_ll_policy{"/sys/module/aml_media/parameters/dolby_vision_ll_policy"};
+    CSysfsPath dolby_vision_ll_policy{"/sys/module/amdolby_vision/parameters/dolby_vision_ll_policy"};
     if (dolby_vision_ll_policy.Exists())
     {
       if (CServiceBroker::GetSettingsComponent()->GetSettings()->GetInt(CSettings::SETTING_COREELEC_AMLOGIC_DV_LED) == AML_DV_PLAYER_LED)
@@ -2037,7 +2037,7 @@ bool CAMLCodec::OpenDecoder(CDVDStreamInfo &hints, enum ELType dovi_el_type)
     // setup Dolby Vision VS-Engine for non DV media
     if (hints.dovi.dv_profile == 0)
     {
-      CSysfsPath("/sys/module/aml_media/parameters/dolby_vision_policy", AMDV_FORCE_OUTPUT_MODE);
+      CSysfsPath("/sys/module/amdolby_vision/parameters/dolby_vision_policy", AMDV_FORCE_OUTPUT_MODE);
       if (CServiceBroker::GetSettingsComponent()->GetSettings()->GetInt(CSettings::SETTING_COREELEC_AMLOGIC_DV_LED) == AML_DV_PLAYER_LED)
         CSysfsPath("/sys/class/amdolby_vision/dv_mode", (AMDV_OUTPUT_MODE_IPT + 1) % 6);
       else
@@ -2045,7 +2045,6 @@ bool CAMLCodec::OpenDecoder(CDVDStreamInfo &hints, enum ELType dovi_el_type)
     }
     else
     {
-      CSysfsPath("/sys/class/amvecm/enable_hdr10plus", 0);
       am_private->gcodec.dv_enable = 1;
     }
 
@@ -2301,8 +2300,8 @@ void CAMLCodec::SetVfmMap(const std::string &name, const std::string &map)
 
 void CAMLCodec::CloseDecoder()
 {
-  CSysfsPath dolby_vision_enable{"/sys/module/aml_media/parameters/dolby_vision_enable"};
-  CSysfsPath dolby_vision_policy{"/sys/module/aml_media/parameters/dolby_vision_policy"};
+  CSysfsPath dolby_vision_enable{"/sys/module/amdolby_vision/parameters/dolby_vision_enable"};
+  CSysfsPath dolby_vision_policy{"/sys/module/amdolby_vision/parameters/dolby_vision_policy"};
   bool dv_enabled(StringUtils::EqualsNoCase(dolby_vision_enable.Get<std::string>().value(), "Y"));
   CLog::Log(LOGDEBUG, "CAMLCodec::CloseDecoder");
 
@@ -2342,8 +2341,6 @@ void CAMLCodec::CloseDecoder()
 
     if (dolby_vision_policy.Get<int>().value() == AMDV_FORCE_OUTPUT_MODE)
       dolby_vision_policy.Set(AMDV_FOLLOW_SOURCE);
-    else
-      CSysfsPath("/sys/class/amvecm/enable_hdr10plus", 1);
 
     dolby_vision_enable.Set('N');
   }
